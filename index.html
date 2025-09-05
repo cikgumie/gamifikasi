@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuiz Sejarah FPS - Mod Halangan</title>
+    <style>
+        /* Basic CSS to make the game fullscreen and style UI */
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allows mouse clicks to go through to the game */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            text-align: center;
+        }
+        .crosshair {
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.7);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #quiz-stats {
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            font-size: 24px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0));
+        }
+        #lives-counter {
+            color: #e74c3c; /* Red color for hearts */
+        }
+        #question-display {
+            background-color: rgba(0,0,0,0.7);
+            padding: 15px 25px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            max-width: 80%;
+            visibility: hidden; /* Hide question until triggered */
+            opacity: 0;
+            transition: visibility 0s, opacity 0.5s linear;
+        }
+        #question-text {
+            font-size: 28px;
+            font-weight: bold;
+        }
+        #feedback {
+            font-size: 36px;
+            font-weight: bold;
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.5s ease-out;
+            text-shadow: 2px 2px 4px #000000;
+        }
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            cursor: pointer;
+        }
+        #start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        #start-screen p {
+            font-size: 20px;
+            max-width: 500px;
+            line-height: 1.5;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+    <div id="ui-container">
+        <div id="quiz-stats">
+            <div id="lives-counter">Nyawa: ❤️❤️❤️</div>
+            <div id="question-counter">Soalan: 0/10</div>
+            <div id="score">Skor: 0</div>
+        </div>
+        <div id="feedback"></div>
+        <div id="question-display">
+            <div id="question-text"></div>
+        </div>
+        <div class="crosshair">+</div>
+    </div>
+    <div id="start-screen">
+        <h1>Kuiz Sejarah FPS</h1>
+        <p>
+            Berjalan ke hadapan untuk mencari halangan. Jawab soalan dengan menembak jawapan yang betul untuk mara.
+        </p>
+        <h2>Klik di mana-mana untuk bermula</h2>
+    </div>
+
+    <!-- **FIXED** Preload audio files with working sources -->
+    <audio id="shoot-sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_73109a1262.mp3?filename=laser-gun-shot-3-146399.mp3" preload="auto"></audio>
+    <audio id="correct-sound" src="https://cdn.pixabay.com/download/audio/2022/03/10/audio_c3b146cfa9.mp3?filename=success-fanfare-trumpets-6185.mp3" preload="auto"></audio>
+    <audio id="wrong-sound" src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_c6ccf3232b.mp3?filename=negative_beeps-6008.mp3" preload="auto"></audio>
+    <audio id="shatter-sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_a81a343bce.mp3?filename=glass-breaking-143028.mp3" preload="auto"></audio>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- QUIZ DATA ---
+        let quizData = [
+            { question: "Perkataan 'syajaratun' yang bermaksud pokok berasal dari bahasa...", answers: ["Bahasa Arab", "Bahasa Yunani", "Bahasa Inggeris"], correct: 0 },
+            { question: "Siapakah sejarawan yang digelar 'Bapa Sejarah'?", answers: ["Ibn Khaldun", "E.H. Carr", "Herodotus"], correct: 2 },
+            { question: "Berapa tahunkah tempoh masa bagi satu alaf?", answers: ["100 Tahun", "1000 Tahun", "10 Tahun"], correct: 1 },
+            { question: "Antara berikut, yang manakah merupakan contoh sumber primer?", answers: ["Buku", "Fosil", "Ensiklopedia"], correct: 1 },
+            { question: "Majalah dan jurnal dikelaskan sebagai sumber...", answers: ["Sumber Lisan", "Sumber Primer", "Sumber Sekunder"], correct: 2 },
+            { question: "Proses mendapatkan maklumat melalui temu bual dengan orang sumber dikenali sebagai...", answers: ["Kaedah Arkeologi", "Kaedah Lisan", "Kaedah Bertulis"], correct: 1 },
+            { question: "Kajian saintifik melalui proses gali cari (ekskavasi) ialah...", answers: ["Kaedah Arkeologi", "Paleografi", "Epigrafi"], correct: 0 },
+            { question: "Siapakah yang menulis karya terkenal 'Muqaddimah'?", answers: ["Khoo Kay Kim", "Ibn Khaldun", "Herodotus"], correct: 1 },
+            { question: "Mempelajari sejarah boleh menyemai rasa cinta akan negara, juga dikenali sebagai...", answers: ["Patriotisme", "Kronologi", "Ideologi"], correct: 0 },
+            { question: "Menurut pengkaji Barat, penentangan Tok Janggut dianggap sebagai satu...", answers: ["Perjuangan", "Pemberontakan", "Pembaharuan"], correct: 1 }
+        ];
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        // **NEW** Add Skybox
+        const loader = new THREE.CubeTextureLoader();
+        const texture = loader.load([
+            'https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/cube/skyboxsun25deg/px.jpg',
+            'https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/cube/skyboxsun25deg/nx.jpg',
+            'https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/cube/skyboxsun25deg/py.jpg',
+            'https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/cube/skyboxsun25deg/ny.jpg',
+            'https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/cube/skyboxsun25deg/pz.jpg',
+            'https://cdn.jsdelivr.net/gh/mrdoob/three.js/examples/textures/cube/skyboxsun25deg/nz.jpg',
+        ]);
+        scene.background = texture;
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.y = 1.8;
+        camera.position.z = 10;
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+
+        // --- LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(0, 50, -50);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // --- GAME WORLD ---
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 300), new THREE.MeshStandardMaterial({ color: 0x81a384 }));
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.z = -140;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // --- GAME STATE & UI ---
+        let score = 0, currentQuestionIndex = 0, lives = 3;
+        let answerObjects = [], gates = [], shatterParticles = [];
+        let canShoot = false, questionActive = false, gameOver = false;
+
+        const scoreElement = document.getElementById('score');
+        const questionCounterElement = document.getElementById('question-counter');
+        const livesElement = document.getElementById('lives-counter');
+        const questionDisplay = document.getElementById('question-display');
+        const questionTextElement = document.getElementById('question-text');
+        const feedbackElement = document.getElementById('feedback');
+        const startScreen = document.getElementById('start-screen');
+        
+        // --- AUDIO ---
+        const shootSound = document.getElementById('shoot-sound');
+        const correctSound = document.getElementById('correct-sound');
+        const wrongSound = document.getElementById('wrong-sound');
+        const shatterSound = document.getElementById('shatter-sound');
+
+        // **FIXED** Added error handling to playSound function
+        function playSound(sound) {
+            sound.currentTime = 0;
+            const playPromise = sound.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    // This catch block will prevent unhandled promise rejection errors.
+                    console.error(`Audio playback failed for ${sound.id}:`, error);
+                });
+            }
+        }
+        
+        // --- LEVEL SETUP ---
+        function setupLevel() {
+            gates.forEach(g => scene.remove(g));
+            gates = [];
+            const gateMaterial = new THREE.MeshStandardMaterial({ color: 0xc0392b, transparent: true, opacity: 0.8 });
+            for(let i = 0; i < quizData.length; i++) {
+                const gate = new THREE.Mesh(new THREE.BoxGeometry(20, 4, 1), gateMaterial);
+                gate.position.set(0, 2, -i * 25);
+                gate.receiveShadow = true;
+                gate.castShadow = true;
+                scene.add(gate);
+                gates.push(gate);
+            }
+        }
+        
+        // **NEW** Shuffle questions function
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // --- QUIZ LOGIC ---
+        function createAnswerTexture(text) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 256;
+            context.fillStyle = '#3498db';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.font = 'Bold 48px Inter';
+            context.fillStyle = 'white';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function loadCurrentQuestion() {
+            questionActive = true;
+            canShoot = true;
+            const q = quizData[currentQuestionIndex];
+            questionTextElement.textContent = q.question;
+            questionDisplay.style.visibility = 'visible';
+            questionDisplay.style.opacity = 1;
+            updateUI();
+
+            const positions = [-7, 0, 7];
+            const currentGateZ = gates[currentQuestionIndex].position.z;
+            q.answers.forEach((answer, index) => {
+                const answerBox = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 1), new THREE.MeshStandardMaterial({ map: createAnswerTexture(answer) }));
+                answerBox.position.set(positions[index], 1.5, currentGateZ - 5);
+                answerBox.castShadow = true;
+                answerBox.isAnswer = true;
+                answerBox.isCorrect = (index === q.correct);
+                answerBox.materialColor = new THREE.Color('#3498db');
+                scene.add(answerBox);
+                answerObjects.push(answerBox);
+            });
+        }
+        
+        function updateUI() {
+            scoreElement.textContent = `Skor: ${score}`;
+            questionCounterElement.textContent = `Soalan: ${currentQuestionIndex}/${quizData.length}`;
+            livesElement.textContent = `Nyawa: ${'❤️'.repeat(lives)}`;
+        }
+        
+        function showFeedback(correct) {
+            feedbackElement.textContent = correct ? 'BETUL!' : 'SALAH';
+            feedbackElement.style.color = correct ? '#2ecc71' : '#e74c3c';
+            feedbackElement.style.opacity = 1;
+            
+            setTimeout(() => {
+                feedbackElement.style.opacity = 0;
+                questionDisplay.style.opacity = 0;
+                questionDisplay.style.visibility = 'hidden';
+                if (gameOver) return;
+                
+                if (correct) {
+                    currentQuestionIndex++;
+                }
+                
+                questionActive = false;
+                if (currentQuestionIndex >= quizData.length) {
+                    showEndScreen(true); // Win
+                }
+            }, 1500);
+        }
+
+        // --- SHATTER ANIMATION ---
+        function shatterBox(object) {
+            playSound(shatterSound);
+            const numFragments = 20;
+            const material = new THREE.MeshStandardMaterial({ color: object.materialColor });
+            for (let i = 0; i < numFragments; i++) {
+                const fragment = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), material);
+                fragment.position.copy(object.position);
+                const velocity = new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random()) * 10, (Math.random() - 0.5) * 10);
+                shatterParticles.push({ mesh: fragment, velocity: velocity, lifespan: 2 });
+                scene.add(fragment);
+            }
+            scene.remove(object);
+        }
+
+        // --- PLAYER CONTROLS ---
+        const controls = { moveForward: false, moveBackward: false, moveLeft: false, moveRight: false };
+        const playerSpeed = 5.0;
+        const clock = new THREE.Clock();
+
+        document.addEventListener('keydown', (event) => {
+            switch (event.code) {
+                case 'KeyW': controls.moveForward = true; break;
+                case 'KeyA': controls.moveLeft = true; break;
+                case 'KeyS': controls.moveBackward = true; break;
+                case 'KeyD': controls.moveRight = true; break;
+            }
+        });
+        document.addEventListener('keyup', (event) => {
+            switch (event.code) {
+                case 'KeyW': controls.moveForward = false; break;
+                case 'KeyA': controls.moveLeft = false; break;
+                case 'KeyS': controls.moveBackward = false; break;
+                case 'KeyD': controls.moveRight = false; break;
+            }
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === document.body) {
+                camera.rotation.y -= e.movementX * 0.002;
+                camera.rotation.x -= e.movementY * 0.002;
+                camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+            }
+        });
+
+        const raycaster = new THREE.Raycaster();
+        document.addEventListener('click', () => {
+             if (document.pointerLockElement === document.body && canShoot) {
+                playSound(shootSound);
+                raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+                const intersects = raycaster.intersectObjects(answerObjects);
+
+                if (intersects.length > 0) {
+                    const shotObject = intersects[0].object;
+                    canShoot = false;
+                    
+                    if (shotObject.isCorrect) {
+                        playSound(correctSound);
+                        score += 10;
+                        scene.remove(gates[currentQuestionIndex]);
+                        showFeedback(true);
+                    } else {
+                        playSound(wrongSound);
+                        lives--;
+                        if (lives <= 0) {
+                            gameOver = true;
+                            showEndScreen(false); // Lose
+                        }
+                        showFeedback(false);
+                    }
+                    updateUI();
+                    answerObjects.forEach(box => shatterBox(box));
+                    answerObjects = [];
+                }
+            }
+        });
+
+        function showEndScreen(isWin) {
+            document.exitPointerLock();
+            startScreen.style.display = 'flex';
+            if (isWin) {
+                startScreen.querySelector('h1').textContent = 'Tahniah!';
+                startScreen.querySelector('p').innerHTML = `Anda telah tamat kuiz!<br><b>Skor Akhir: ${score}/${quizData.length * 10}</b>`;
+            } else {
+                startScreen.querySelector('h1').textContent = 'Permainan Tamat';
+                startScreen.querySelector('p').innerHTML = `Anda kehabisan nyawa.<br><b>Skor Akhir: ${score}</b>`;
+            }
+            startScreen.querySelector('h2').textContent = 'Klik untuk bermain semula';
+        }
+        
+        // --- GAME LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            if (gameOver) return;
+
+            const moveSpeed = playerSpeed * delta;
+            if (controls.moveForward) camera.translateZ(-moveSpeed);
+            if (controls.moveBackward) camera.translateZ(moveSpeed);
+            if (controls.moveLeft) camera.translateX(-moveSpeed);
+            if (controls.moveRight) camera.translateX(moveSpeed);
+
+            if (!questionActive && currentQuestionIndex < gates.length) {
+                if (scene.getObjectById(gates[currentQuestionIndex].id)) {
+                    const distanceToGate = camera.position.distanceTo(gates[currentQuestionIndex].position);
+                    if (distanceToGate < 10) {
+                        loadCurrentQuestion();
+                    }
+                }
+            }
+            
+            for (let i = shatterParticles.length - 1; i >= 0; i--) {
+                const p = shatterParticles[i];
+                p.velocity.y -= 9.8 * delta;
+                p.mesh.position.add(p.velocity.clone().multiplyScalar(delta));
+                p.lifespan -= delta;
+                if (p.lifespan <= 0) {
+                    scene.remove(p.mesh);
+                    shatterParticles.splice(i, 1);
+                }
+            }
+            renderer.render(scene, camera);
+        }
+
+        // --- START & RESIZE ---
+        startScreen.addEventListener('click', () => {
+            if (gameOver || currentQuestionIndex >= quizData.length) {
+                // Reset game state for replay
+                score = 0;
+                currentQuestionIndex = 0;
+                lives = 3;
+                gameOver = false;
+                camera.position.set(0, 1.8, 10);
+                shuffleArray(quizData);
+                setupLevel();
+                updateUI();
+            }
+            document.body.requestPointerLock();
+            startScreen.style.display = 'none';
+        });
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        shuffleArray(quizData);
+        setupLevel();
+        updateUI();
+        animate();
+    </script>
+</body>
+</html>
+
